@@ -1,0 +1,61 @@
+# Docker
+# Build a Docker image
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+- master
+
+resources:
+- repo: self
+
+variables:
+  tag: '$(Build.BuildId)'
+
+stages:
+- stage: Build
+  displayName: Build image
+  jobs:
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+
+    - script: |
+        cd hosts/ZhonTai.Host
+        dotnet publish
+        rm -rf bin/Release/net8.0/publish/ConfigCenter
+        rm -rf bin/Release/net8.0/publish/Configs
+        rm -rf bin/Release/net8.0/publish/appsettings.json
+        rm -rf bin/Release/net8.0/publish/InitData
+      workingDirectory:  $(System.DefaultWorkingDirectory)/
+      displayName: 'dotnet publish'
+    
+    - task: ArchiveFiles@2
+      inputs:
+        rootFolderOrFile: $(System.DefaultWorkingDirectory)/hosts/ZhonTai.Host/bin/Release/net8.0/publish
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(System.DefaultWorkingDirectory)/hosts/ZhonTai.Host/bin/Release/net8.0/publish.zip'
+        replaceExistingArchive: true
+      displayName: 'Archive Files'
+    - task: CopyFilesOverSSH@0
+      inputs:
+        sshEndpoint: 'Fedora'
+        sourceFolder: '$(System.DefaultWorkingDirectory)/hosts/ZhonTai.Host/bin/Release/net8.0'
+        contents: 'publish.zip'
+        targetFolder: '~/web/eorder-api'
+        readyTimeout: '20000'
+      displayName: 'Copy Files'
+    - task: SSH@0
+      inputs:
+        sshEndpoint: 'Fedora'
+        runOptions: 'commands'
+        commands: |
+          systemctl stop eorder-api
+          unzip -o ~/web/eorder-api/publish.zip -d ~/web/eorder-api
+          rm -rf ~/web/eorder/publish.zip
+          systemctl start eorder-api
+        readyTimeout: '20000'
+      displayName: 'start service'
+        
